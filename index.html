@@ -1,1 +1,277 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jukebox — Listen Together</title>
+<meta name="description" content="Ruang musik bersama dengan antrean YouTube yang disinkronkan secara real-time.">
+<style>
+:root{color-scheme:dark;--bg:#0c0f14;--panel:#151a22;--panel2:#1c232e;--line:#2a3340;--text:#f5f7fa;--muted:#9aa6b5;--lime:#b6ff63;--danger:#ff7474;--radius:18px}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 20% 0%,#1b2430 0,transparent 45%),var(--bg);color:var(--text);font:15px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input{font:inherit}button{cursor:pointer;border:0;border-radius:12px;padding:11px 15px;font-weight:750;background:var(--lime);color:#10140c}button.secondary{background:var(--panel2);border:1px solid var(--line);color:var(--text)}button:disabled{opacity:.45;cursor:not-allowed}
+input{width:100%;background:#0e1218;border:1px solid var(--line);border-radius:12px;color:var(--text);padding:12px 13px;outline:none}input:focus{border-color:var(--lime)}
+header{display:flex;align-items:center;justify-content:space-between;padding:20px clamp(16px,4vw,48px);border-bottom:1px solid #222a35;position:sticky;top:0;background:#0c0f14eF;backdrop-filter:blur(12px);z-index:5}
+.brand{display:flex;gap:11px;align-items:center;font-weight:900;font-size:20px;letter-spacing:-.6px}.logo{width:34px;height:34px;border-radius:11px;background:var(--lime);display:grid;place-items:center;color:#111;font-weight:1000}
+.status{font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center}.dot{width:8px;height:8px;border-radius:50%;background:#667080}.dot.ok{background:var(--lime);box-shadow:0 0 12px #b6ff6370}
+main{max-width:1240px;margin:auto;padding:28px clamp(14px,3vw,32px) 50px}.grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,1fr);gap:18px}.panel{background:linear-gradient(145deg,#171c25,#12161d);border:1px solid var(--line);border-radius:var(--radius);padding:18px;min-width:0}.panelhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);font-weight:850}.title{font-size:20px;font-weight:850;letter-spacing:-.5px}.muted{color:var(--muted)}.stack{display:grid;gap:12px}.row{display:flex;gap:9px}.row>*{min-width:0}.row input{flex:1}.player{width:100%;aspect-ratio:16/9;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#050607}.player iframe{width:100%;height:100%;border:0}.placeholder{height:100%;display:grid;place-items:center;text-align:center;padding:24px;color:var(--muted);background:radial-gradient(ellipse at center,#24152d,#080a0e 68%)}.placeholder strong{display:block;color:var(--text);font-size:19px;margin-bottom:6px}.nowtitle{font-size:18px;font-weight:800;margin-top:14px;overflow-wrap:anywhere}.controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:14px}.controls button{min-width:46px}.controlnote{font-size:12px;color:var(--muted);margin-top:10px}.roomcode{font-weight:900;letter-spacing:2px;color:var(--lime);font-size:20px}.queue{display:grid;gap:8px;max-height:390px;overflow:auto}.queueitem{display:flex;align-items:center;gap:10px;padding:10px;background:#11161d;border:1px solid #252d38;border-radius:13px}.thumb{width:76px;aspect-ratio:16/9;object-fit:cover;border-radius:8px;background:#242a33;flex-shrink:0}.qinfo{flex:1;min-width:0}.qtitle{font-weight:750;font-size:13px;overflow-wrap:anywhere}.qsub{font-size:11px;color:var(--muted);margin-top:3px}.qactions{display:flex;gap:5px}.qactions button{padding:7px 9px}.small{font-size:12px}.formlabel{font-size:12px;color:var(--muted);font-weight:750;margin-bottom:5px;display:block}.sectiongap{margin-top:18px}.notice{padding:11px 13px;border-radius:12px;background:#171f29;border:1px solid #2b3745;color:#c4cfdb;font-size:13px;overflow-wrap:anywhere}.notice.error{border-color:#743b40;background:#281619;color:#ffb7b7}.notice.success{border-color:#42622c;background:#182414;color:#d6ffb5}.hidden{display:none!important}.pill{font-size:11px;padding:5px 9px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}.footer{text-align:center;color:#6e7988;font-size:12px;margin-top:22px}
+@media(max-width:850px){.grid{grid-template-columns:1fr}header{padding:15px}.panel{padding:14px}.title{font-size:18px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><div class="logo">♫</div><span>jukebox<span style="color:var(--lime)">.</span></span></div>
+  <div class="status"><span id="statusDot" class="dot"></span><span id="connectionStatus">Belum terhubung</span></div>
+</header>
+<main>
+  <section class="panel" id="welcomePanel">
+    <div class="panelhead"><div><div class="eyebrow">Listen together</div><div class="title">Buat ruang musik atau gabung</div></div><span class="pill">Realtime prototype</span></div>
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <div class="stack">
+        <label><span class="formlabel">Nama ruang baru</span><input id="newRoomName" maxlength="50" value="Ruang musik" placeholder="Contoh: Nongkrong malam"></label>
+        <button id="createRoomBtn">＋ Buat ruang</button>
+      </div>
+      <div class="stack">
+        <label><span class="formlabel">Kode ruang</span><input id="joinCode" maxlength="12" placeholder="Masukkan kode ruang"></label>
+        <button class="secondary" id="joinRoomBtn">Gabung ruang</button>
+      </div>
+    </div>
+  </section>
+  <div id="app" class="grid sectiongap hidden">
+    <section class="panel">
+      <div class="panelhead"><div><div class="eyebrow">Now playing</div><div class="title" id="roomTitle">Ruang musik</div><div class="muted small" id="roomMeta">Menyiapkan ruang…</div></div><span class="pill" id="memberMode">ROOM</span></div>
+      <div class="player" id="playerWrap"><div class="placeholder"><div><strong>♫ Belum ada lagu</strong>Tambahkan video YouTube untuk mulai mendengarkan bersama.</div></div></div>
+      <div class="nowtitle" id="currentTitle">Belum ada lagu diputar</div>
+      <div class="controls">
+        <button class="secondary" id="prevBtn" title="Lagu sebelumnya">⏮</button>
+        <button id="playBtn">▶ Play</button>
+        <button class="secondary" id="nextBtn" title="Lagu berikutnya">⏭ Berikutnya</button>
+        <button class="secondary" id="copyLinkBtn">Salin tautan ruang</button>
+      </div>
+      <div class="controlnote">Anggota baru mengikuti lagu aktif. Browser mungkin meminta klik Play pertama kali karena kebijakan autoplay.</div>
+      <div id="message" class="notice sectiongap">Hubungkan ruang untuk memulai.</div>
+      <div class="sectiongap stack">
+        <div class="panelhead" style="margin:0"><div><div class="eyebrow">Tambahkan musik</div><div class="title">URL YouTube</div></div></div>
+        <div class="row"><input id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off"><button id="addBtn">＋ Add</button></div>
+        <div class="small muted">Masukkan URL video YouTube atau youtu.be. Pencarian berdasarkan judul belum diaktifkan di versi ini.</div>
+      </div>
+    </section>
+    <aside class="stack">
+      <section class="panel">
+        <div class="panelhead"><div><div class="eyebrow">Shared queue</div><div class="title">Antrean lagu</div></div><span class="pill" id="queueCount">0 lagu</span></div>
+        <div class="queue" id="queueList"><div class="muted small">Belum ada lagu dalam antrean.</div></div>
+      </section>
+      <section class="panel">
+        <div class="panelhead"><div><div class="eyebrow">Room settings</div><div class="title">Bagikan ruang</div></div></div>
+        <div class="stack">
+          <div><div class="formlabel">Kode ruang</div><div class="roomcode" id="roomCode">--------</div></div>
+          <div><div class="formlabel">Tautan undangan</div><input id="inviteUrl" readonly></div>
+          <div class="row"><button class="secondary" id="copyCodeBtn">Salin kode</button><button class="secondary" id="leaveBtn">Keluar ruang</button></div>
+        </div>
+      </section>
+    </aside>
+  </div>
+  <div class="footer">Jukebox prototype · GitHub Pages + Supabase Realtime · YouTube video playback</div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(() => {
+  "use strict";
+  // Configuration: this publishable key is intended for browser use.
+  const SUPABASE_URL = "https://rruoxcepjehrzsxppaei.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_QFcXDMUs0MwkPHdMyo0eUQ_fG1PwNYQ";
+  const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
+  let room = null, queueRows = [], currentVideoId = null, ytPlayer = null;
+  let roomChannel = null, refreshTimer = null, suppressPlayerEvents = false, lastStateUpdate = 0;
+  const $ = id => document.getElementById(id);
+  const say = (msg, type="") => { const el=$("message"); el.textContent=msg; el.className="notice sectiongap"+(type ? " "+type : ""); };
+  const setConnection = (msg, ok=false) => { $("connectionStatus").textContent=msg; $("statusDot").className="dot"+(ok?" ok":""); };
+  function parseVideoId(input) {
+    try {
+      const u = new URL(input.trim());
+      if (u.hostname === "youtu.be" || u.hostname.endsWith(".youtu.be")) return u.pathname.split("/").filter(Boolean)[0] || null;
+      if (u.hostname.includes("youtube.com") || u.hostname.includes("youtube-nocookie.com")) {
+        if (u.pathname === "/watch") return u.searchParams.get("v");
+        const m = u.pathname.match(/^\/(embed|shorts|live)\/([^/?]+)/);
+        if (m) return m[2];
+      }
+    } catch (_) {}
+    return null;
+  }
+  function inviteFor(code) { const u=new URL(location.href); u.searchParams.set("room",code); return u.toString(); }
+  async function createRoom() {
+    const name = $("newRoomName").value.trim() || "Ruang musik";
+    setConnection("Membuat ruang…");
+    const {data,error}=await sbClient.from("rooms").insert({name}).select().single();
+    if(error) throw error;
+    await openRoom(data);
+  }
+  async function joinRoomByCode(code) {
+    if(!code) throw new Error("Masukkan kode ruang.");
+    setConnection("Mencari ruang…");
+    const {data,error}=await sbClient.from("rooms").select("*").eq("code",code.toUpperCase()).maybeSingle();
+    if(error) throw error;
+    if(!data) throw new Error("Ruang tidak ditemukan. Periksa kode undangan.");
+    await openRoom(data);
+  }
+  async function openRoom(row) {
+    if(roomChannel) await sbClient.removeChannel(roomChannel);
+    room=row; queueRows=[]; currentVideoId=null;
+    $("welcomePanel").classList.add("hidden"); $("app").classList.remove("hidden");
+    $("roomTitle").textContent=row.name; $("roomCode").textContent=row.code; $("roomMeta").textContent="Ruang musik · Kode "+row.code;
+    $("inviteUrl").value=inviteFor(row.code); $("memberMode").textContent="SHARED ROOM";
+    setConnection("Menghubungkan…");
+    await ensurePlaybackRow(row.id);
+    await Promise.all([loadQueue(),loadPlayback()]);
+    subscribeRoom();
+    setConnection("Terhubung",true);
+    say("Terhubung ke ruang "+row.code+". Bagikan tautan agar teman bisa bergabung.","success");
+  }
+  async function ensurePlaybackRow(roomId) {
+    const {error}=await sbClient.from("playback_state").upsert({room_id:roomId},{onConflict:"room_id",ignoreDuplicates:true});
+    if(error) console.warn("Playback row:",error.message);
+  }
+  async function loadQueue() {
+    const {data,error}=await sbClient.from("queue").select("*").eq("room_id",room.id).order("id",{ascending:true});
+    if(error) throw error;
+    queueRows=data||[]; renderQueue();
+  }
+  async function loadPlayback() {
+    const {data,error}=await sbClient.from("playback_state").select("*").eq("room_id",room.id).maybeSingle();
+    if(error) throw error;
+    if(data && data.current_video_id) applyPlayback(data);
+  }
+  function subscribeRoom() {
+    roomChannel=sbClient.channel("jukebox-room-"+room.id)
+      .on("postgres_changes",{event:"*",schema:"public",table:"queue",filter:"room_id=eq."+room.id},async payload=>{
+        await loadQueue().catch(e=>say("Gagal memuat antrean: "+e.message,"error"));
+        if(payload.eventType==="INSERT" && !currentVideoId && queueRows.length) await playQueueIndex(0,true);
+      })
+      .on("postgres_changes",{event:"*",schema:"public",table:"playback_state",filter:"room_id=eq."+room.id},payload=>{
+        if(payload.new && payload.new.room_id) applyPlayback(payload.new);
+      })
+      .subscribe(status=>{ if(status==="SUBSCRIBED") setConnection("Realtime aktif",true); if(status==="CHANNEL_ERROR"||status==="TIMED_OUT") setConnection("Realtime bermasalah"); });
+  }
+  function renderQueue() {
+    $("queueCount").textContent=queueRows.length+" lagu";
+    const list=$("queueList"); list.innerHTML="";
+    if(!queueRows.length){list.innerHTML='<div class="muted small">Belum ada lagu dalam antrean.</div>';return;}
+    queueRows.forEach((q,i)=>{
+      const item=document.createElement("div"); item.className="queueitem";
+      const img=document.createElement("img");img.className="thumb";img.alt="Thumbnail";img.src="https://i.ytimg.com/vi/"+encodeURIComponent(q.video_id)+"/mqdefault.jpg";
+      const info=document.createElement("div");info.className="qinfo";
+      const title=document.createElement("div");title.className="qtitle";title.textContent=q.title||("YouTube video · "+q.video_id);
+      const sub=document.createElement("div");sub.className="qsub";sub.textContent=(q.video_id===currentVideoId?"▶ Sedang diputar · ":"Antrean #"+(i+1)+" · ")+(q.added_by||"Guest");
+      info.append(title,sub);
+      const actions=document.createElement("div");actions.className="qactions";
+      const play=document.createElement("button");play.className="secondary";play.textContent="▶";play.title="Putar lagu ini";play.onclick=()=>playQueueIndex(i,false);
+      const del=document.createElement("button");del.className="secondary";del.textContent="×";del.title="Hapus dari antrean";del.onclick=()=>removeQueueItem(q.id);
+      actions.append(play,del);item.append(img,info,actions);list.append(item);
+    });
+  }
+  async function addSong() {
+    if(!room) throw new Error("Buat atau gabung ruang terlebih dahulu.");
+    const input=$("youtubeUrl").value.trim(), videoId=parseVideoId(input);
+    if(!videoId) throw new Error("URL tidak valid. Gunakan link youtube.com/watch?v=... atau youtu.be/...");
+    const title="YouTube video · "+videoId;
+    const {error}=await sbClient.from("queue").insert({room_id:room.id,video_id:videoId,title,added_by:"Guest"});
+    if(error) throw error;
+    $("youtubeUrl").value="";
+    await loadQueue();
+    say("Lagu ditambahkan ke antrean bersama.","success");
+    if(!currentVideoId) await playQueueIndex(0,true);
+  }
+  async function removeQueueItem(id) {
+    const {error}=await sbClient.from("queue").delete().eq("id",id).eq("room_id",room.id);
+    if(error) say("Gagal menghapus lagu: "+error.message,"error");
+    else await loadQueue();
+  }
+  async function playQueueIndex(index, autoplay) {
+    const q=queueRows[index]; if(!q) return;
+    currentVideoId=q.video_id; renderQueue();
+    if(!window.YT || !window.YT.Player) { await loadYouTubeAPI(); }
+    if(!ytPlayer) {
+      $("playerWrap").innerHTML='<div id="yt-player" style="width:100%;height:100%"></div>';
+      ytPlayer=new YT.Player("yt-player",{videoId:q.video_id,playerVars:{autoplay:autoplay?1:0,controls:1,playsinline:1,origin:location.origin,enablejsapi:1},events:{
+        onReady:()=>{ if(autoplay) ytPlayer.playVideo(); },
+        onStateChange:e=>{ if(suppressPlayerEvents)return; if(e.data===YT.PlayerState.ENDED) nextTrack(); if(e.data===YT.PlayerState.PLAYING||e.data===YT.PlayerState.PAUSED) savePlayback(e.data===YT.PlayerState.PLAYING); }
+      }});
+    } else {
+      suppressPlayerEvents=true; ytPlayer.loadVideoById(q.video_id); setTimeout(()=>{suppressPlayerEvents=false;},800);
+      if(!autoplay) ytPlayer.pauseVideo();
+    }
+    $("currentTitle").textContent=q.title||("YouTube video · "+q.video_id);
+    await savePlayback(!!autoplay,0,q.video_id);
+  }
+  function loadYouTubeAPI() {
+    return new Promise((resolve,reject)=>{
+      if(window.YT&&window.YT.Player)return resolve();
+      const prior=window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady=()=>{if(prior)prior();resolve();};
+      if(!document.querySelector('script[data-youtube-api]')) {
+        const s=document.createElement("script");s.src="https://www.youtube.com/iframe_api";s.dataset.youtubeApi="1";s.onerror=()=>reject(new Error("API YouTube gagal dimuat."));document.head.appendChild(s);
+      }
+      setTimeout(()=>{if(!(window.YT&&window.YT.Player))reject(new Error("Pemutar YouTube belum siap. Coba muat ulang halaman."));},12000);
+    });
+  }
+  async function savePlayback(playing,position,videoId) {
+    if(!room) return;
+    const id=videoId||currentVideoId;
+    const pos=typeof position==="number"?position:(ytPlayer&&ytPlayer.getCurrentTime?ytPlayer.getCurrentTime():0);
+    const now=Date.now(); if(now-lastStateUpdate<500 && position===undefined)return; lastStateUpdate=now;
+    const {error}=await sbClient.from("playback_state").upsert({room_id:room.id,current_video_id:id,position_seconds:Math.max(0,Number(pos)||0),is_playing:!!playing,updated_at:new Date().toISOString()},{onConflict:"room_id"});
+    if(error) console.warn("Playback sync:",error.message);
+  }
+  async function applyPlayback(state) {
+    if(!state.current_video_id) return;
+    currentVideoId=state.current_video_id;
+    const q=queueRows.find(x=>x.video_id===currentVideoId);
+    $("currentTitle").textContent=q?q.title:("YouTube video · "+currentVideoId);
+    renderQueue();
+    if(!window.YT||!window.YT.Player) return;
+    if(!ytPlayer) {
+      await loadYouTubeAPI().catch(()=>{});
+      if(!ytPlayer) {
+        $("playerWrap").innerHTML='<div id="yt-player" style="width:100%;height:100%"></div>';
+        ytPlayer=new YT.Player("yt-player",{videoId:state.current_video_id,playerVars:{controls:1,playsinline:1,origin:location.origin,enablejsapi:1},events:{onReady:()=>syncPlayer(state),onStateChange:e=>{if(suppressPlayerEvents)return;if(e.data===YT.PlayerState.ENDED)nextTrack();if(e.data===YT.PlayerState.PLAYING||e.data===YT.PlayerState.PAUSED)savePlayback(e.data===YT.PlayerState.PLAYING);}}});
+      }
+    } else syncPlayer(state);
+  }
+  function syncPlayer(state) {
+    if(!ytPlayer||!state.current_video_id)return;
+    suppressPlayerEvents=true;
+    const existing=ytPlayer.getVideoData&&ytPlayer.getVideoData().video_id;
+    if(existing!==state.current_video_id)ytPlayer.loadVideoById({videoId:state.current_video_id,startSeconds:state.position_seconds||0});
+    else if(Math.abs((ytPlayer.getCurrentTime?ytPlayer.getCurrentTime():0)-(state.position_seconds||0))>4)ytPlayer.seekTo(state.position_seconds||0,true);
+    if(state.is_playing)ytPlayer.playVideo();else ytPlayer.pauseVideo();
+    setTimeout(()=>{suppressPlayerEvents=false;},1200);
+  }
+  async function nextTrack() { if(!room)return; const i=queueRows.findIndex(q=>q.video_id===currentVideoId);if(i>=0&&i+1<queueRows.length)await playQueueIndex(i+1,true);else {await savePlayback(false);say("Antrean selesai.");} }
+  async function previousTrack() { if(!room)return;const i=queueRows.findIndex(q=>q.video_id===currentVideoId);if(i>0)await playQueueIndex(i-1,true);else if(queueRows.length)await playQueueIndex(0,true); }
+  async function togglePlay() { if(!ytPlayer){if(queueRows.length) return playQueueIndex(0,true);throw new Error("Tambahkan lagu terlebih dahulu.");}const state=ytPlayer.getPlayerState();if(state===YT.PlayerState.PLAYING){ytPlayer.pauseVideo();await savePlayback(false);}else{ytPlayer.playVideo();await savePlayback(true);} }
+  function copy(text){if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(text);const t=document.createElement("textarea");t.value=text;document.body.append(t);t.select();document.execCommand("copy");t.remove();return Promise.resolve();}
+  function guard(fn){return async()=>{try{await fn();}catch(e){console.error(e);say(e.message||"Terjadi kesalahan. Periksa koneksi dan izin Supabase.","error");}};}
+  $("createRoomBtn").addEventListener("click",guard(createRoom));
+  $("joinRoomBtn").addEventListener("click",guard(()=>joinRoomByCode($("joinCode").value.trim())));
+  $("addBtn").addEventListener("click",guard(addSong));
+  $("youtubeUrl").addEventListener("keydown",e=>{if(e.key==="Enter")guard(addSong)();});
+  $("nextBtn").addEventListener("click",guard(nextTrack));
+  $("prevBtn").addEventListener("click",guard(previousTrack));
+  $("playBtn").addEventListener("click",guard(togglePlay));
+  $("copyCodeBtn").addEventListener("click",()=>copy(room?room.code:"").then(()=>say("Kode ruang disalin.","success")));
+  $("copyLinkBtn").addEventListener("click",()=>copy(room?inviteFor(room.code):"").then(()=>say("Tautan ruang disalin.","success")));
+  $("leaveBtn").addEventListener("click",async()=>{if(roomChannel)await sbClient.removeChannel(roomChannel);roomChannel=null;room=null;queueRows=[];currentVideoId=null;if(ytPlayer){try{ytPlayer.destroy()}catch(_){}ytPlayer=null;}$("app").classList.add("hidden");$("welcomePanel").classList.remove("hidden");setConnection("Belum terhubung");});
+  async function init() {
+    try {
+      const {error}=await sbClient.from("rooms").select("id").limit(1);
+      if(error) {setConnection("Supabase belum siap");console.warn(error.message);return;}
+      setConnection("Online",true);
+      const code=new URL(location.href).searchParams.get("room");
+      if(code){$("joinCode").value=code;await joinRoomByCode(code);}
+    } catch(e) {setConnection("Koneksi gagal");console.error(e);}
+  }
+  init();
+})();
+</script>
+</body>
+</html>
