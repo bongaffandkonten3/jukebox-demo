@@ -50,7 +50,7 @@ const $=id=>document.getElementById(id);
 let room=null,queue=[],currentId=null,player=null,channel=null,suppress=false,ytReadyPromise=null;
 const say=(t,type='')=>{$('message').textContent=t;$('message').className='msg section '+type};
 const status=t=>$('status').textContent=t;
-function parseId(s){try{let u=new URL(s.trim());if(u.hostname==='youtu.be')return u.pathname.split('/').filter(Boolean)[0]||null;if(u.hostname.includes('youtube.com')||u.hostname.includes('youtube-nocookie.com')){if(u.pathname==='/watch')return u.searchParams.get('v');let m=u.pathname.match(/^\\/(embed|shorts|live)\\/([^/?]+)/);if(m)return m[2]}}catch(e){}return null}
+function parseId(s){try{let u=new URL(s.trim());if(u.hostname==='youtu.be')return u.pathname.split('/').filter(Boolean)[0]||null;if(u.hostname.includes('youtube.com')||u.hostname.includes('youtube-nocookie.com')){if(u.pathname==='/watch')return u.searchParams.get('v');let m=u.pathname.match(/^\/(embed|shorts|live)\/([^/?]+)/);if(m)return m[2]}}catch(e){}return null}
 function invite(code){let u=new URL(location.href);u.searchParams.set('room',code);return u.toString()}
 async function createRoom(){let {data,error}=await sbClient.from('rooms').insert({name:$('roomName').value.trim()||'Ruang musik'}).select().single();if(error)throw error;await openRoom(data)}
 async function joinRoom(code){if(!code)throw Error('Masukkan kode ruang.');let {data,error}=await sbClient.from('rooms').select('*').eq('code',code.toUpperCase()).maybeSingle();if(error)throw error;if(!data)throw Error('Ruang tidak ditemukan.');await openRoom(data)}
