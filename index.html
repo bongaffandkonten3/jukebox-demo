@@ -50,7 +50,7 @@ button,input,select{font:inherit}button{cursor:pointer;border:0}button:focus-vis
         <div class="add-box">
           <form id="addForm"><div class="input-row"><input class="input" id="songUrl" placeholder="https://youtube.com/watch?v=..." autocomplete="off" required><button class="btn btn-primary" type="submit">Add</button></div></form>
           <div class="hint">Mendukung URL YouTube standar, youtu.be, dan ID video 11 karakter.</div>
-          <div class="warning">Prototype ini memutar video lewat YouTube embed. Pencarian berdasarkan judul dan sinkronisasi antarperangkat memerlukan integrasi backend/API.</div>
+          <div class="warning">Playlist dan status pemutaran disinkronkan melalui Supabase. Pemutaran otomatis dapat dibatasi browser; beberapa video juga melarang embed.</div>
         </div>
       </section>
       <section class="panel">
@@ -69,7 +69,7 @@ button,input,select{font:inherit}button{cursor:pointer;border:0}button:focus-vis
       </section>
     </div>
   </main>
-  <div class="bottom-note">JUKEBOX WEB PROTOTYPE · Belum terhubung ke backend real-time · Dibuat sebagai fondasi pengembangan</div>
+  <div class="bottom-note">JUKEBOX · Supabase real-time · Playlist bersama</div>
 </div>
 <div class="toast" id="toast"></div>
 <div class="modal-backdrop" id="modalBackdrop">
@@ -81,117 +81,54 @@ button,input,select{font:inherit}button{cursor:pointer;border:0}button:focus-vis
     </form>
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+const SUPABASE_URL = "https://rruoxcepjehrzsxppaei.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_QFcXDMUs0MwkPHdMyo0eUQ_fG1PwNYQ";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 const $ = s => document.querySelector(s);
 let queue = [];
 let currentIndex = -1;
-let room = {name:"Late Night Radio", mode:"Public", code:"JBX-7K2Q"};
+let room = {name:"Ruang Musik", mode:"Public", code:""};
+let roomId = null;
 let isPlaying = false;
 let playerReady = false;
 let ytPlayer = null;
 let ytApiLoading = false;
+let applyingRemote = false;
+let lastPlaybackWrite = 0;
+let channel = null;
 
-function toast(msg){const el=$("#toast");el.textContent=msg;el.classList.add("show");clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove("show"),2600)}
-function videoId(raw){
-  const s=raw.trim();
-  if(/^[\w-]{11}$/.test(s)) return s;
-  try{
-    const u=new URL(s);
-    if(u.hostname.endsWith("youtu.be")) return u.pathname.split("/").filter(Boolean)[0]||null;
-    if(u.hostname.includes("youtube.com")||u.hostname.includes("youtube-nocookie.com")){
-      if(u.searchParams.get("v")) return u.searchParams.get("v");
-      const p=u.pathname.split("/").filter(Boolean);
-      if(["embed","shorts","live"].includes(p[0])) return p[1]||null;
-    }
-  }catch(e){}
-  return null;
-}
-function loadYouTubeApi(){
- if(window.YT&&window.YT.Player){createPlayer();return}
- if(ytApiLoading)return;ytApiLoading=true;
- const tag=document.createElement('script');tag.src="https://www.youtube.com/iframe_api";document.head.appendChild(tag);
- window.onYouTubeIframeAPIReady=()=>{createPlayer()};
-}
-function createPlayer(){
- const frame=$("#videoFrame");
- frame.innerHTML='<div id="ytPlayer" style="width:100%;height:100%"></div>';
- ytPlayer=new YT.Player("ytPlayer",{width:"100%",height:"100%",videoId:queue[currentIndex]?.id||"",playerVars:{playsinline:1,rel:0,enablejsapi:1,origin:window.location.origin,widget_referrer:window.location.href},events:{
-  onReady:()=>{playerReady=true;applyVolume();if(queue[currentIndex]){ytPlayer.cueVideoById(queue[currentIndex].id)}},
-  onStateChange:e=>{if(e.data===YT.PlayerState.PLAYING){isPlaying=true;updatePlayUI()}else if(e.data===YT.PlayerState.PAUSED){isPlaying=false;updatePlayUI()}else if(e.data===YT.PlayerState.ENDED){nextTrack(true)}},
-  onError:()=>toast("Video tidak dapat diputar. Coba URL YouTube lain.")
- }});
-}
-function applyVolume(){if(playerReady&&ytPlayer&&ytPlayer.setVolume)ytPlayer.setVolume(Number($("#volume").value))}
-function addSong(id){
- if(queue.some(x=>x.id===id)){toast("Lagu sudah ada di antrean.");return}
- queue.push({id,title:"YouTube video · "+id,addedBy:"You",thumb:`https://i.ytimg.com/vi/${id}/hqdefault.jpg`});
- if(currentIndex===-1){currentIndex=0;loadTrack(true)}renderQueue();toast("Lagu ditambahkan ke antrean.");
-}
-function loadTrack(autoPlay){
- if(currentIndex<0||currentIndex>=queue.length){currentIndex=-1;isPlaying=false;renderCurrent();renderQueue();return}
- const item=queue[currentIndex];
- if(!window.YT||!window.YT.Player){loadYouTubeApi();renderCurrent();return}
- if(!ytPlayer||!playerReady){loadYouTubeApi();renderCurrent();return}
- ytPlayer.loadVideoById(item.id);
- if(!autoPlay)ytPlayer.pauseVideo();
- isPlaying=!!autoPlay;renderCurrent();renderQueue();updatePlayUI();
-}
-function nextTrack(ended=false){
- if(queue.length===0)return;
- if(currentIndex<queue.length-1){currentIndex++;loadTrack(true)}
- else {isPlaying=false;if(playerReady&&ytPlayer.pauseVideo)ytPlayer.pauseVideo();updatePlayUI();toast(ended?"Antrean selesai. Tambahkan lagu berikutnya.":"Tidak ada lagu berikutnya.")}
-}
-function renderCurrent(){
- const item=queue[currentIndex];
- if(!item){$("#currentTitle").textContent="Belum ada lagu diputar";$("#currentSub").textContent="Tambahkan lagu ke antrean untuk memulai";$("#trackPosition").textContent=queue.length+" lagu";$("#playStatus").textContent="Ready to play";return}
- $("#currentTitle").textContent=item.title;$("#currentSub").textContent="Ditambahkan oleh "+item.addedBy+" · YouTube";$("#trackPosition").textContent=(currentIndex+1)+" / "+queue.length;$("#playStatus").textContent=isPlaying?"Playing":"Ready";
-}
-function renderQueue(){
- const list=$("#queueList");list.innerHTML="";
- $("#queueBadge").textContent=queue.length+" tracks";$("#trackPosition").textContent=queue.length+" lagu";
- if(!queue.length){list.innerHTML='<div class="empty-queue">Antrean masih kosong.<br>Tambahkan lagu pertama untuk memulai.</div>';renderCurrent();return}
- queue.forEach((item,i)=>{
-  const el=document.createElement("div");el.className="queue-item"+(i===currentIndex?" current":"");
-  const img=document.createElement("img");img.className="thumb";img.src=item.thumb;img.alt="";img.onerror=()=>img.style.visibility="hidden";
-  const info=document.createElement("div");info.style.minWidth="0";
-  const title=document.createElement("div");title.className="q-title";title.textContent=item.title;
-  const sub=document.createElement("div");sub.className="q-sub";sub.textContent=(i===currentIndex?(isPlaying?"Now playing":"Selected"):"Added by "+item.addedBy);
-  info.append(title,sub);
-  const actions=document.createElement("div");actions.className="q-actions";
-  const play=document.createElement("button");play.className="icon-btn";play.textContent=i===currentIndex?"♫":"▶";play.title="Play this song";play.onclick=()=>{currentIndex=i;loadTrack(true)};
-  const del=document.createElement("button");del.className="icon-btn";del.textContent="×";del.title="Remove";del.onclick=()=>{const wasCurrent=i===currentIndex;queue.splice(i,1);if(i<currentIndex)currentIndex--;else if(wasCurrent){if(queue.length){currentIndex=Math.min(i,queue.length-1);loadTrack(true)}else{currentIndex=-1;if(ytPlayer&&ytPlayer.stopVideo)ytPlayer.stopVideo();renderCurrent()}}renderQueue();toast("Lagu dihapus.")};
-  actions.append(play,del);el.append(img,info,actions);list.append(el)
- });
- renderCurrent();
-}
-function updatePlayUI(){
- $("#playBtn").textContent=isPlaying?"Ⅱ":"▶";$("#playBtn").title=isPlaying?"Pause":"Play";
- $("#playStatus").textContent=isPlaying?"Playing":"Ready";renderQueue();
-}
-function setMode(mode){
- room.mode=mode;$("#roomLabel").textContent="Ruang musik · "+mode;$("#visibilityValue").textContent=mode;
- ["#modePublic","#modeUnlisted","#modeSpeakers"].forEach(s=>$(s).classList.remove("active"));
- if(mode==="Public")$("#modePublic").classList.add("active");
- else if(mode==="Unlisted")$("#modeUnlisted").classList.add("active");
- else $("#modeSpeakers").classList.add("active");
-}
-$("#addForm").addEventListener("submit",e=>{e.preventDefault();const id=videoId($("#songUrl").value);if(!id){toast("URL YouTube atau ID video belum valid.");return}addSong(id);$("#songUrl").value=""});
-$("#playBtn").onclick=()=>{
- if(currentIndex===-1){if(queue.length){currentIndex=0;loadTrack(true)}else toast("Tambahkan lagu terlebih dahulu.");return}
- if(!window.YT||!ytPlayer||!playerReady){loadYouTubeApi();toast("Player sedang disiapkan. Tekan Play lagi jika perlu.");return}
- if(isPlaying)ytPlayer.pauseVideo();else ytPlayer.playVideo();
-};
-$("#skipBtn").onclick=()=>nextTrack(false);
-$("#prevBtn").onclick=()=>{if(currentIndex>0){currentIndex--;loadTrack(true)}else if(playerReady&&ytPlayer.seekTo){ytPlayer.seekTo(0,true);ytPlayer.playVideo()}else toast("Belum ada lagu sebelumnya.")};
-$("#volume").oninput=()=>{$("#volumeValue").textContent=$("#volume").value+"%";applyVolume()};
-$("#modePublic").onclick=()=>setMode("Public");$("#modeUnlisted").onclick=()=>setMode("Unlisted");$("#modeSpeakers").onclick=()=>setMode("Shared Speakers");
-$("#clearQueue").onclick=()=>{queue=[];currentIndex=-1;isPlaying=false;if(ytPlayer&&ytPlayer.stopVideo)ytPlayer.stopVideo();renderQueue();toast("Antrean dikosongkan.")};
-function openModal(rename=false){$("#modalTitle").textContent=rename?"Rename room":"Create a room";$("#modalDesc").textContent=rename?"Ubah nama ruang musikmu.":"Buat ruang musik baru untuk didengarkan bersama.";$("#newRoomName").value=room.name;$("#newRoomMode").value=room.mode;$("#roomForm button[type=submit]").textContent=rename?"Save changes":"Create room";$("#roomForm").dataset.rename=rename?"1":"0";$("#modalBackdrop").classList.add("show")}
-$("#openRoom").onclick=()=>openModal(false);$("#renameRoom").onclick=()=>openModal(true);$("#cancelModal").onclick=()=>$("#modalBackdrop").classList.remove("show");
-$("#roomForm").onsubmit=e=>{e.preventDefault();const isRename=$("#roomForm").dataset.rename==="1";room.name=$("#newRoomName").value.trim()||"My Jukebox";room.mode=$("#newRoomMode").value;if(!isRename){room.code="JBX-"+Math.random().toString(36).slice(2,6).toUpperCase();queue=[];currentIndex=-1;isPlaying=false;if(ytPlayer&&ytPlayer.stopVideo)ytPlayer.stopVideo();renderQueue()}$("#roomName").textContent=room.name;$("#roomCode").textContent=room.code;setMode(room.mode);$("#modalBackdrop").classList.remove("show");toast(isRename?"Nama ruangan diperbarui.":"Ruangan demo dibuat.")};
-$("#copyLink").onclick=async()=>{const url=location.href.split("#")[0]+"#room="+room.code;try{await navigator.clipboard.writeText(url);toast("Tautan demo disalin.")}catch(e){prompt("Salin tautan ini:",url)}};
-$("#modalBackdrop").addEventListener("click",e=>{if(e.target===$("#modalBackdrop"))$("#modalBackdrop").classList.remove("show")});
-renderQueue();setMode(room.mode);
+function toast(msg){const el=$("#toast");el.textContent=msg;el.classList.add("show");clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove("show"),3200)}
+function videoId(raw){const s=raw.trim();if(/^[\w-]{11}$/.test(s))return s;try{const u=new URL(s);if(u.hostname.endsWith("youtu.be"))return u.pathname.split("/").filter(Boolean)[0]||null;if(u.hostname.includes("youtube.com")||u.hostname.includes("youtube-nocookie.com")){if(u.searchParams.get("v"))return u.searchParams.get("v");const p=u.pathname.split("/").filter(Boolean);if(["embed","shorts","live"].includes(p[0]))return p[1]||null}}catch(e){}return null}
+function loadYouTubeApi(){if(window.YT&&window.YT.Player){createPlayer();return}if(ytApiLoading)return;ytApiLoading=true;window.onYouTubeIframeAPIReady=()=>createPlayer();const tag=document.createElement('script');tag.src="https://www.youtube.com/iframe_api";document.head.appendChild(tag)}
+function createPlayer(){const frame=$("#videoFrame");frame.innerHTML='<div id="ytPlayer" style="width:100%;height:100%"></div>';ytPlayer=new YT.Player("ytPlayer",{width:"100%",height:"100%",videoId:queue[currentIndex]?.video_id||"",playerVars:{playsinline:1,rel:0,enablejsapi:1,origin:location.origin,widget_referrer:location.href},events:{onReady:()=>{playerReady=true;applyVolume();if(queue[currentIndex]){ytPlayer.cueVideoById(queue[currentIndex].video_id)}},onStateChange:e=>{if(applyingRemote)return;if(e.data===YT.PlayerState.PLAYING){isPlaying=true;updatePlayUI();writePlayback(true)}else if(e.data===YT.PlayerState.PAUSED){isPlaying=false;updatePlayUI();writePlayback(false)}else if(e.data===YT.PlayerState.ENDED){nextTrack(true)}},onError:e=>toast("YouTube menolak pemutaran video ini (kode "+e.data+"). Coba video lain atau buka di YouTube.")}})}
+function applyVolume(){if(playerReady&&ytPlayer?.setVolume)ytPlayer.setVolume(Number($("#volume").value))}
+function getCurrent(){return currentIndex>=0?queue[currentIndex]:null}
+function setCurrentByVideo(id){const idx=queue.findIndex(x=>x.video_id===id);currentIndex=idx;renderCurrent();renderQueue()}
+async function writePlayback(playing){if(!roomId||applyingRemote)return;const item=getCurrent();const position=playerReady&&ytPlayer?.getCurrentTime?ytPlayer.getCurrentTime():0;const now=Date.now();if(now-lastPlaybackWrite<1800&&playing===isPlaying)return;lastPlaybackWrite=now;const {error}=await supabase.from('playback_state').upsert({room_id:roomId,current_video_id:item?.video_id||null,position_seconds:position||0,is_playing:!!playing,updated_at:new Date().toISOString()},{onConflict:'room_id'});if(error)console.warn('Playback sync:',error.message)}
+async function applyRemotePlayback(state){if(!state)return;applyingRemote=true;const idx=queue.findIndex(x=>x.video_id===state.current_video_id);if(idx>=0&&idx!==currentIndex){currentIndex=idx;if(playerReady&&ytPlayer){ytPlayer.cueVideoById(state.current_video_id)}renderCurrent();renderQueue()}if(playerReady&&ytPlayer&&state.current_video_id){const current=ytPlayer.getVideoData?.().video_id;if(current!==state.current_video_id){ytPlayer.cueVideoById(state.current_video_id)}const target=Number(state.position_seconds)||0;const actual=ytPlayer.getCurrentTime?.()||0;if(Math.abs(actual-target)>4)ytPlayer.seekTo(target,true);if(state.is_playing){ytPlayer.playVideo()}else{ytPlayer.pauseVideo()}isPlaying=!!state.is_playing;updatePlayUI()}applyingRemote=false}
+async function addSong(id){if(queue.some(x=>x.video_id===id)){toast('Lagu sudah ada di antrean.');return}const row={room_id:roomId,video_id:id,title:'YouTube video · '+id,added_by:'Guest'};const {data,error}=await supabase.from('queue').insert(row).select().single();if(error){toast('Gagal menambah lagu: '+error.message);return}queue.push(data);queue.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));if(currentIndex===-1){currentIndex=0;loadTrack(true);await writePlayback(true)}renderQueue();toast('Lagu ditambahkan ke antrean bersama.')}
+function loadTrack(autoPlay){if(currentIndex<0||currentIndex>=queue.length){currentIndex=-1;isPlaying=false;renderCurrent();renderQueue();writePlayback(false);return}const item=queue[currentIndex];if(!window.YT||!window.YT.Player||!ytPlayer||!playerReady){loadYouTubeApi();renderCurrent();return}if(autoPlay)ytPlayer.loadVideoById(item.video_id);else ytPlayer.cueVideoById(item.video_id);isPlaying=!!autoPlay;renderCurrent();renderQueue();updatePlayUI();writePlayback(isPlaying)}
+async function nextTrack(ended=false){if(queue.length===0)return;if(currentIndex<queue.length-1){currentIndex++;loadTrack(true)}else{isPlaying=false;if(playerReady&&ytPlayer?.pauseVideo)ytPlayer.pauseVideo();updatePlayUI();await writePlayback(false);toast(ended?'Antrean selesai. Tambahkan lagu berikutnya.':'Tidak ada lagu berikutnya.') }}
+function renderCurrent(){const item=getCurrent();if(!item){$("#currentTitle").textContent='Belum ada lagu diputar';$("#currentSub").textContent='Tambahkan URL YouTube untuk memulai';$("#trackPosition").textContent=queue.length+' lagu';$("#playStatus").textContent='Ready';return}$("#currentTitle").textContent=item.title;$("#currentSub").textContent='Ditambahkan oleh '+(item.added_by||'Guest')+' · YouTube';$("#trackPosition").textContent=(currentIndex+1)+' / '+queue.length;$("#playStatus").textContent=isPlaying?'Playing':'Ready'}
+function renderQueue(){const list=$("#queueList");list.innerHTML='';$("#queueBadge").textContent=queue.length+' tracks';if(!queue.length){list.innerHTML='<div class="empty-queue">Antrean masih kosong.<br>Tambahkan lagu pertama untuk memulai.</div>';renderCurrent();return}queue.forEach((item,i)=>{const el=document.createElement('div');el.className='queue-item'+(i===currentIndex?' current':'');const img=document.createElement('img');img.className='thumb';img.src='https://i.ytimg.com/vi/'+item.video_id+'/hqdefault.jpg';img.alt='';img.onerror=()=>img.style.visibility='hidden';const info=document.createElement('div');info.style.minWidth='0';const title=document.createElement('div');title.className='q-title';title.textContent=item.title;const sub=document.createElement('div');sub.className='q-sub';sub.textContent=(i===currentIndex?(isPlaying?'Now playing':'Selected'):'Added by '+(item.added_by||'Guest'));info.append(title,sub);const actions=document.createElement('div');actions.className='q-actions';const play=document.createElement('button');play.className='icon-btn';play.textContent=i===currentIndex?'♫':'▶';play.title='Play this song';play.onclick=()=>{currentIndex=i;loadTrack(true)};const del=document.createElement('button');del.className='icon-btn';del.textContent='×';del.title='Remove';del.onclick=async()=>{const {error}=await supabase.from('queue').delete().eq('id',item.id);if(error){toast('Gagal menghapus lagu.');return}if(i===currentIndex){currentIndex=Math.min(i,queue.length-2);if(queue.length<=1)currentIndex=-1;else currentIndex=Math.min(i,queue.length-2);loadTrack(currentIndex>=0)}else if(i<currentIndex)currentIndex--;renderQueue();toast('Lagu dihapus dari antrean bersama.')};actions.append(play,del);el.append(img,info,actions);list.append(el)});renderCurrent()}
+function updatePlayUI(){$("#playBtn").textContent=isPlaying?'Ⅱ':'▶';$("#playBtn").title=isPlaying?'Pause':'Play';$("#playStatus").textContent=isPlaying?'Playing':'Ready';renderQueue()}
+function setMode(mode){room.mode=mode;$("#roomLabel").textContent='Ruang musik · '+mode;$("#visibilityValue").textContent=mode;['#modePublic','#modeUnlisted','#modeSpeakers'].forEach(s=>$(s).classList.remove('active'));if(mode==='Public')$('#modePublic').classList.add('active');else if(mode==='Unlisted')$('#modeUnlisted').classList.add('active');else $('#modeSpeakers').classList.add('active')}
+async function initRoom(){const hash=new URLSearchParams(location.hash.slice(1));let code=hash.get('room');if(!code){code='JBX-'+Math.random().toString(36).slice(2,6).toUpperCase()}let {data:found,error}=await supabase.from('rooms').select('*').eq('code',code).maybeSingle();if(error){toast('Koneksi Supabase gagal: '+error.message);return}if(!found){const {data,error:insertError}=await supabase.from('rooms').insert({code,name:'Late Night Radio'}).select().single();if(insertError){toast('Gagal membuat ruang: '+insertError.message);return}found=data;}roomId=found.id;room={name:found.name,mode:'Public',code:found.code};$('#roomName').textContent=room.name;$('#roomCode').textContent=room.code;setMode(room.mode);if(!location.hash.includes('room='))history.replaceState(null,'','#room='+encodeURIComponent(room.code));await refreshQueue();const {data:state}=await supabase.from('playback_state').select('*').eq('room_id',roomId).maybeSingle();if(state&&state.current_video_id){const idx=queue.findIndex(x=>x.video_id===state.current_video_id);if(idx>=0){currentIndex=idx;loadYouTubeApi();}}channel=supabase.channel('room-'+roomId).on('postgres_changes',{event:'*',schema:'public',table:'queue',filter:'room_id=eq.'+roomId},()=>refreshQueue()).on('postgres_changes',{event:'*',schema:'public',table:'playback_state',filter:'room_id=eq.'+roomId},payload=>{if(payload.new)applyRemotePlayback(payload.new)}).on('postgres_changes',{event:'*',schema:'public',table:'rooms',filter:'id=eq.'+roomId},payload=>{if(payload.new){room.name=payload.new.name;$('#roomName').textContent=room.name}}).subscribe(status=>{if(status==='SUBSCRIBED')toast('Terhubung ke ruang musik bersama.')})}
+async function refreshQueue(){if(!roomId)return;const {data,error}=await supabase.from('queue').select('*').eq('room_id',roomId).order('created_at',{ascending:true});if(error){console.warn(error);return}const oldCurrent=getCurrent()?.video_id;queue=data||[];currentIndex=oldCurrent?queue.findIndex(x=>x.video_id===oldCurrent):-1;if(currentIndex<0&&queue.length&&oldCurrent===null)currentIndex=0;renderQueue()}
+$('#addForm').addEventListener('submit',async e=>{e.preventDefault();const id=videoId($('#songUrl').value);if(!id){toast('URL YouTube atau ID video belum valid.');return}await addSong(id);$('#songUrl').value='' });
+$('#playBtn').onclick=async()=>{if(currentIndex===-1){if(queue.length){currentIndex=0;loadTrack(true)}else toast('Tambahkan lagu terlebih dahulu.');return}if(!window.YT||!ytPlayer||!playerReady){loadYouTubeApi();toast('Player sedang disiapkan. Tekan Play lagi jika perlu.');return}if(isPlaying){ytPlayer.pauseVideo();isPlaying=false}else{ytPlayer.playVideo();isPlaying=true}updatePlayUI();await writePlayback(isPlaying)};
+$('#skipBtn').onclick=()=>nextTrack(false);$('#prevBtn').onclick=()=>{if(currentIndex>0){currentIndex--;loadTrack(true)}else if(playerReady&&ytPlayer?.seekTo){ytPlayer.seekTo(0,true);ytPlayer.playVideo()}else toast('Belum ada lagu sebelumnya.')};$('#volume').oninput=()=>{$('#volumeValue').textContent=$('#volume').value+'%';applyVolume()};
+$('#modePublic').onclick=()=>setMode('Public');$('#modeUnlisted').onclick=()=>setMode('Unlisted');$('#modeSpeakers').onclick=()=>setMode('Shared Speakers');
+$('#clearQueue').onclick=async()=>{const {error}=await supabase.from('queue').delete().eq('room_id',roomId);if(error){toast('Gagal mengosongkan antrean.');return}currentIndex=-1;isPlaying=false;if(ytPlayer?.stopVideo)ytPlayer.stopVideo();await writePlayback(false);renderQueue();toast('Antrean ruang dikosongkan.')};
+function openModal(rename=false){$('#modalTitle').textContent=rename?'Rename room':'Create a room';$('#modalDesc').textContent=rename?'Ubah nama ruang musikmu.':'Buat ruang musik baru untuk didengarkan bersama.';$('#newRoomName').value=room.name;$('#newRoomMode').value=room.mode;$('#roomForm button[type=submit]').textContent=rename?'Save changes':'Create room';$('#roomForm').dataset.rename=rename?'1':'0';$('#modalBackdrop').classList.add('show')}
+$('#openRoom').onclick=()=>openModal(false);$('#renameRoom').onclick=()=>openModal(true);$('#cancelModal').onclick=()=>$('#modalBackdrop').classList.remove('show');
+$('#roomForm').onsubmit=async e=>{e.preventDefault();const ren=$('#roomForm').dataset.rename==='1';const name=$('#newRoomName').value.trim()||'My Jukebox';const mode=$('#newRoomMode').value;if(ren){const {error}=await supabase.from('rooms').update({name}).eq('id',roomId);if(error){toast('Gagal mengubah nama ruang: '+error.message);return}room.name=name;$('#roomName').textContent=name;setMode(mode)}else{const code='JBX-'+Math.random().toString(36).slice(2,6).toUpperCase();const {data,error}=await supabase.from('rooms').insert({name,code}).select().single();if(error){toast('Gagal membuat ruang: '+error.message);return}if(channel)await supabase.removeChannel(channel);roomId=data.id;room={name:data.name,mode,code:data.code};queue=[];currentIndex=-1;await refreshQueue();history.replaceState(null,'','#room='+encodeURIComponent(code));await initRoom();$('#roomName').textContent=name;$('#roomCode').textContent=code;setMode(mode)}$('#modalBackdrop').classList.remove('show');toast(ren?'Nama ruang diperbarui.':'Ruang baru dibuat. Bagikan tautannya!')};
+$('#copyLink').onclick=async()=>{const url=location.href.split('#')[0]+'#room='+room.code;try{await navigator.clipboard.writeText(url);toast('Tautan ruang disalin.')}catch(e){prompt('Salin tautan ini:',url)}};$('#modalBackdrop').addEventListener('click',e=>{if(e.target===$('#modalBackdrop'))$('#modalBackdrop').classList.remove('show')});
+renderQueue();setMode(room.mode);initRoom();
+setInterval(()=>{if(isPlaying&&playerReady&&roomId)writePlayback(true)},5000);
+
 </script>
 </body>
 </html>
